@@ -39,6 +39,68 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Endpoint для проверки базы данных
+app.get('/check-db', async (req, res) => {
+  try {
+    const PostgresDB = require('./database-postgres');
+    
+    // Проверяем соединение
+    const connectionTest = await PostgresDB.testConnection();
+    if (!connectionTest) {
+      return res.json({
+        status: 'error',
+        message: 'Database connection failed',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Проверяем таблицы
+    const { Pool } = require('pg');
+    const getDatabaseConfig = () => {
+      const isProduction = process.env.NODE_ENV === 'production';
+      const connectionString = isProduction 
+        ? process.env.DATABASE_URL 
+        : process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL;
+
+      return {
+        connectionString,
+        ssl: isProduction ? { rejectUnauthorized: false } : false,
+      };
+    };
+
+    const pool = new Pool(getDatabaseConfig());
+    
+    // Проверяем существующие таблицы
+    const tablesResult = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      ORDER BY table_name;
+    `);
+
+    const usersCount = await pool.query('SELECT COUNT(*) as count FROM users');
+    const transactionsCount = await pool.query('SELECT COUNT(*) as count FROM transactions');
+
+    await pool.end();
+
+    res.json({
+      status: 'success',
+      database: 'connected',
+      tables: tablesResult.rows.map(row => row.table_name),
+      users_count: parseInt(usersCount.rows[0].count),
+      transactions_count: parseInt(transactionsCount.rows[0].count),
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    res.json({
+      status: 'error',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Логирование webhook запросов
 app.use('/webhook', (req, res, next) => {
   console.log('📨 Получен webhook запрос:', {
