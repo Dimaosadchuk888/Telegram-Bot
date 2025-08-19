@@ -98,12 +98,21 @@ bot.catch((err, ctx) => {
 async function startBot() {
   try {
     console.log('🚀 Запуск Telegram Farming Bot...');
+    console.log(`🔧 NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔗 WEBHOOK_URL: ${process.env.WEBHOOK_URL || 'не настроен'}`);
+    console.log(`🔑 BOT_TOKEN: ${process.env.BOT_TOKEN ? 'настроен' : 'не настроен'}`);
     
     const port = process.env.PORT || 3000;
     
-    if (process.env.NODE_ENV === 'production' && process.env.WEBHOOK_URL) {
+    if (process.env.NODE_ENV === 'production') {
       // Продакшен режим с webhook
       console.log('🌐 Запуск в продакшен режиме с webhook');
+      
+      if (!process.env.WEBHOOK_URL) {
+        console.error('❌ WEBHOOK_URL не настроен для продакшена!');
+        process.exit(1);
+      }
+      
       console.log(`🔗 Webhook URL: ${process.env.WEBHOOK_URL}`);
       
       // Запускаем Express сервер
@@ -112,13 +121,25 @@ async function startBot() {
         console.log(`🏥 Healthcheck доступен по адресу: http://localhost:${port}/health`);
       });
       
-      // Настраиваем webhook
-      await bot.telegram.setWebhook(process.env.WEBHOOK_URL);
-      console.log('✅ Webhook настроен');
+      // Настраиваем webhook (опционально)
+      try {
+        await bot.telegram.setWebhook(process.env.WEBHOOK_URL);
+        console.log('✅ Webhook настроен');
+      } catch (error) {
+        console.warn('⚠️ Не удалось настроить webhook:', error.message);
+        console.log('ℹ️ Бот будет работать без webhook');
+      }
       
     } else {
       // Локальная разработка с long polling
       console.log('🔄 Запуск в режиме разработки (long polling)');
+      
+      if (!process.env.BOT_TOKEN || process.env.BOT_TOKEN === 'your_bot_token_here') {
+        console.error('❌ BOT_TOKEN не настроен для разработки!');
+        console.log('📝 Добавьте BOT_TOKEN в файл .env для локального тестирования');
+        process.exit(1);
+      }
+      
       await bot.launch();
     }
     
