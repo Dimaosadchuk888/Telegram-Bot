@@ -1,0 +1,7 @@
+# Переменные окружения для Railway
+# Скопируйте эти переменные в Railway Dashboard
+
+BOT_TOKEN=your_actual_bot_token_here
+NODE_ENV=production
+WEBHOOK_URL=https://web-telegram-bot.up.railway.app/webhook
+PORT=3000

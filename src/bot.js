@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { Telegraf, session } = require('telegraf');
+const express = require('express');
 const handlers = require('./handlers');
 
 // Проверяем наличие токена
@@ -11,6 +12,31 @@ if (!process.env.BOT_TOKEN) {
 
 // Создаем экземпляр бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
+
+// Создаем Express приложение для healthcheck
+const app = express();
+
+// Healthcheck endpoint для Railway
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Telegram Bot is running',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Healthcheck endpoint для Railway
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'telegram-bot',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Webhook endpoint для Telegram
+app.use('/webhook', bot.webhookCallback('/webhook'));
 
 // Подключаем middleware для сессий
 bot.use(session());
@@ -73,11 +99,23 @@ async function startBot() {
   try {
     console.log('🚀 Запуск Telegram Farming Bot...');
     
+    const port = process.env.PORT || 3000;
+    
     if (process.env.NODE_ENV === 'production' && process.env.WEBHOOK_URL) {
       // Продакшен режим с webhook
       console.log('🌐 Запуск в продакшен режиме с webhook');
+      console.log(`🔗 Webhook URL: ${process.env.WEBHOOK_URL}`);
+      
+      // Запускаем Express сервер
+      app.listen(port, () => {
+        console.log(`✅ HTTP сервер запущен на порту ${port}`);
+        console.log(`🏥 Healthcheck доступен по адресу: http://localhost:${port}/health`);
+      });
+      
+      // Настраиваем webhook
       await bot.telegram.setWebhook(process.env.WEBHOOK_URL);
-      bot.startWebhook('/webhook', null, process.env.PORT || 3000);
+      console.log('✅ Webhook настроен');
+      
     } else {
       // Локальная разработка с long polling
       console.log('🔄 Запуск в режиме разработки (long polling)');
