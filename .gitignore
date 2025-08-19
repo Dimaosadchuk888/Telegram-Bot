@@ -63,3 +63,9 @@ Thumbs.db
 
 # PM2
 .pm2/
+
+# Railway ignore
+.railwayignore
+
+# Documentation with tokens (exclude from Railway processing)
+RAILWAY_VARIABLES_EXAMPLE.txt
