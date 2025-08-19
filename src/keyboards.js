@@ -3,14 +3,14 @@ const { Markup } = require('telegraf');
 // Главное меню
 const mainMenu = Markup.inlineKeyboard([
   [
-    Markup.button.callback('📊 Баланс', 'balance'),
-    Markup.button.callback('💸 Вывод средств', 'withdraw')
+    Markup.button.callback('💰 Баланс', 'balance'),
+    Markup.button.callback('🏦 Пополнить', 'deposit')
   ],
   [
-    Markup.button.callback('➕ Пополнить', 'deposit'),
-    Markup.button.callback('📈 Статистика', 'stats')
+    Markup.button.callback('📤 Вывести средства', 'withdraw')
   ],
   [
+    Markup.button.callback('📈 Статистика', 'stats'),
     Markup.button.callback('❓ Помощь', 'help')
   ]
 ]);

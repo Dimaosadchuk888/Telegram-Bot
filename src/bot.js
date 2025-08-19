@@ -147,6 +147,16 @@ async function startBot() {
         console.log('ℹ️ Бот будет работать без webhook');
       }
       
+      // Удаляем старое меню (нижние кнопки)
+      try {
+        await bot.telegram.setChatMenuButton({
+          menu_button: { type: 'default' }
+        });
+        console.log('✅ Старое меню удалено');
+      } catch (error) {
+        console.warn('⚠️ Не удалось удалить старое меню:', error.message);
+      }
+      
     } else {
       // Локальная разработка с long polling
       console.log('🔄 Запуск в режиме разработки (long polling)');
@@ -158,6 +168,16 @@ async function startBot() {
       }
       
       await bot.launch();
+      
+      // Удаляем старое меню (нижние кнопки)
+      try {
+        await bot.telegram.setChatMenuButton({
+          menu_button: { type: 'default' }
+        });
+        console.log('✅ Старое меню удалено');
+      } catch (error) {
+        console.warn('⚠️ Не удалось удалить старое меню:', error.message);
+      }
     }
     
     console.log('✅ Farming Bot успешно запущен!');
