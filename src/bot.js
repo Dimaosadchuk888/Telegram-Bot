@@ -3,6 +3,9 @@ const { Telegraf, session } = require('telegraf');
 const express = require('express');
 const handlers = require('./handlers');
 
+// Отключаем предупреждение о punycode
+process.removeAllListeners('warning');
+
 // Проверяем наличие токена
 if (!process.env.BOT_TOKEN) {
   console.error('❌ BOT_TOKEN не найден в переменных окружения!');
@@ -35,8 +38,22 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Логирование webhook запросов
+app.use('/webhook', (req, res, next) => {
+  console.log('📨 Получен webhook запрос:', {
+    method: req.method,
+    url: req.url,
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+  next();
+});
+
 // Webhook endpoint для Telegram
-app.use('/webhook', bot.webhookCallback('/webhook'));
+app.post('/webhook', bot.webhookCallback('/webhook'));
+app.get('/webhook', (req, res) => {
+  res.json({ status: 'webhook endpoint ready' });
+});
 
 // Подключаем middleware для сессий
 bot.use(session());
