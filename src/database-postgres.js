@@ -31,17 +31,19 @@ const initializeDatabase = async () => {
   try {
     console.log('🗄️ Инициализация базы данных...');
     
-    // Создаем таблицу пользователей
+    // Создаем таблицу пользователей с новой структурой
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        user_id BIGINT UNIQUE NOT NULL,
-        username VARCHAR(255),
-        balance DECIMAL(20, 8) DEFAULT 0,
-        hold_balance DECIMAL(20, 8) DEFAULT 0,
-        total_earned DECIMAL(20, 8) DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+        telegram_id BIGINT UNIQUE NOT NULL,
+        username TEXT,
+        first_name TEXT,
+        last_name TEXT,
+        balance_uni NUMERIC(20, 6) DEFAULT 0,
+        hold_balance NUMERIC(20, 6) DEFAULT 0,
+        withdrawn_total NUMERIC(20, 6) DEFAULT 0,
+        last_active TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
@@ -70,7 +72,7 @@ const initializeDatabase = async () => {
 const getUser = async (userId) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM users WHERE user_id = $1',
+      'SELECT * FROM users WHERE telegram_id = $1',
       [userId]
     );
     return result.rows[0] || null;
@@ -81,17 +83,19 @@ const getUser = async (userId) => {
 };
 
 // Создать или обновить пользователя
-const createOrUpdateUser = async (userId, username) => {
+const createOrUpdateUser = async (userId, username, firstName = null, lastName = null) => {
   try {
     const result = await pool.query(`
-      INSERT INTO users (user_id, username, balance, hold_balance, total_earned)
-      VALUES ($1, $2, 0, 0, 0)
-      ON CONFLICT (user_id) 
+      INSERT INTO users (telegram_id, username, first_name, last_name, balance_uni, hold_balance, withdrawn_total)
+      VALUES ($1, $2, $3, $4, 0, 0, 0)
+      ON CONFLICT (telegram_id) 
       DO UPDATE SET 
         username = EXCLUDED.username,
-        updated_at = NOW()
+        first_name = EXCLUDED.first_name,
+        last_name = EXCLUDED.last_name,
+        last_active = NOW()
       RETURNING *
-    `, [userId, username]);
+    `, [userId, username, firstName, lastName]);
     
     return result.rows[0];
   } catch (error) {
@@ -101,14 +105,14 @@ const createOrUpdateUser = async (userId, username) => {
 };
 
 // Обновить баланс пользователя
-const updateUserBalance = async (userId, balance, holdBalance, totalEarned) => {
+const updateUserBalance = async (userId, balanceUni, holdBalance, withdrawnTotal) => {
   try {
     const result = await pool.query(`
       UPDATE users 
-      SET balance = $2, hold_balance = $3, total_earned = $4, updated_at = NOW()
-      WHERE user_id = $1
+      SET balance_uni = $2, hold_balance = $3, withdrawn_total = $4, last_active = NOW()
+      WHERE telegram_id = $1
       RETURNING *
-    `, [userId, balance, holdBalance, totalEarned]);
+    `, [userId, balanceUni, holdBalance, withdrawnTotal]);
     
     return result.rows[0];
   } catch (error) {
@@ -139,9 +143,9 @@ const getStats = async () => {
     const result = await pool.query(`
       SELECT 
         COUNT(*) as total_users,
-        SUM(balance) as total_balance,
+        SUM(balance_uni) as total_balance,
         SUM(hold_balance) as total_hold_balance,
-        SUM(total_earned) as total_earned
+        SUM(withdrawn_total) as total_withdrawn
       FROM users
     `);
     

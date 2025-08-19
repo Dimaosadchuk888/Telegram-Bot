@@ -11,10 +11,12 @@ const WALLET_ADDRESS = 'EQxxxxxxxxxxxxxxxxxxxxxxxxxxx'; // Замените на
 const handleStart = async (ctx) => {
   const userId = ctx.from.id;
   const username = ctx.from.username;
+  const firstName = ctx.from.first_name;
+  const lastName = ctx.from.last_name;
   
   try {
     // Регистрируем пользователя в PostgreSQL
-    await PostgresDB.createOrUpdateUser(userId, username);
+    await PostgresDB.createOrUpdateUser(userId, username, firstName, lastName);
     
     const welcomeMessage = `
 🤖 Добро пожаловать в Farming Bot!
@@ -50,9 +52,9 @@ const handleBalance = async (ctx) => {
     const balanceMessage = `
 📊 Ваш баланс:
 
-💰 Доступно: ${parseFloat(user.balance).toLocaleString()} UNI
+💰 Доступно: ${parseFloat(user.balance_uni).toLocaleString()} UNI
 ⏳ В обработке: ${parseFloat(user.hold_balance).toLocaleString()} UNI
-📈 Всего заработано: ${parseFloat(user.total_earned).toLocaleString()} UNI
+📈 Всего выведено: ${parseFloat(user.withdrawn_total).toLocaleString()} UNI
 
 💡 Минимальная сумма для вывода: ${MIN_WITHDRAWAL.toLocaleString()} UNI
   `;
@@ -76,7 +78,7 @@ const handleWithdraw = async (ctx) => {
       return;
     }
     
-    const balance = parseFloat(user.balance);
+    const balance = parseFloat(user.balance_uni);
     
     if (balance < MIN_WITHDRAWAL) {
       const errorMessage = `
@@ -136,9 +138,9 @@ const handleConfirmWithdraw = async (ctx) => {
       return;
     }
     
-    const currentBalance = parseFloat(user.balance);
+    const currentBalance = parseFloat(user.balance_uni);
     const currentHoldBalance = parseFloat(user.hold_balance);
-    const currentTotalEarned = parseFloat(user.total_earned);
+    const currentWithdrawnTotal = parseFloat(user.withdrawn_total);
     
     // Проверяем баланс еще раз
     if (currentBalance < amount) {
@@ -150,7 +152,7 @@ const handleConfirmWithdraw = async (ctx) => {
     const newBalance = currentBalance - amount;
     const newHoldBalance = currentHoldBalance + amount;
     
-    await PostgresDB.updateUserBalance(userId, newBalance, newHoldBalance, currentTotalEarned);
+    await PostgresDB.updateUserBalance(userId, newBalance, newHoldBalance, currentWithdrawnTotal);
     
     // Добавляем транзакцию
     await PostgresDB.addTransaction(userId, 'withdrawal', amount, fee);
@@ -228,9 +230,9 @@ const handleStats = async (ctx) => {
     const statsMessage = `
 📈 Ваша статистика:
 
-💰 Доступно: ${parseFloat(user.balance).toLocaleString()} UNI
+💰 Доступно: ${parseFloat(user.balance_uni).toLocaleString()} UNI
 ⏳ В обработке: ${parseFloat(user.hold_balance).toLocaleString()} UNI
-📊 Всего заработано: ${parseFloat(user.total_earned).toLocaleString()} UNI
+📊 Всего выведено: ${parseFloat(user.withdrawn_total).toLocaleString()} UNI
 
 🌍 Общая статистика бота:
 👥 Пользователей: ${stats?.total_users || 0}
