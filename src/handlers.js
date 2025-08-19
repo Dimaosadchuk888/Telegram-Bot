@@ -1,4 +1,5 @@
 const db = require('./database');
+const PostgresDB = require('./database-postgres');
 const { mainMenu, depositKeyboard, withdrawKeyboard, confirmWithdrawKeyboard } = require('./keyboards');
 
 // Константы
@@ -11,10 +12,11 @@ const handleStart = async (ctx) => {
   const userId = ctx.from.id;
   const username = ctx.from.username;
   
-  // Регистрируем пользователя
-  db.getUser(userId, username);
-  
-  const welcomeMessage = `
+  try {
+    // Регистрируем пользователя в PostgreSQL
+    await PostgresDB.createOrUpdateUser(userId, username);
+    
+    const welcomeMessage = `
 🤖 Добро пожаловать в Farming Bot!
 
 💰 Здесь вы можете:
@@ -25,88 +27,140 @@ const handleStart = async (ctx) => {
 
 Выберите действие:
   `;
-  
-  await ctx.reply(welcomeMessage, mainMenu);
+    
+    await ctx.reply(welcomeMessage, mainMenu);
+  } catch (error) {
+    console.error('❌ Ошибка в handleStart:', error);
+    await ctx.reply('😔 Произошла ошибка. Попробуйте позже.', mainMenu);
+  }
 };
 
 // Обработчик кнопки "Баланс"
 const handleBalance = async (ctx) => {
   const userId = ctx.from.id;
-  const user = db.getBalance(userId);
   
-  const balanceMessage = `
+  try {
+    const user = await PostgresDB.getUser(userId);
+    
+    if (!user) {
+      await ctx.editMessageText('❌ Пользователь не найден. Отправьте /start', mainMenu);
+      return;
+    }
+    
+    const balanceMessage = `
 📊 Ваш баланс:
 
-💰 Доступно: ${user.balance.toLocaleString()} UNI
-⏳ В обработке: ${user.holdBalance.toLocaleString()} UNI
-📈 Всего заработано: ${user.totalEarned.toLocaleString()} UNI
+💰 Доступно: ${parseFloat(user.balance).toLocaleString()} UNI
+⏳ В обработке: ${parseFloat(user.hold_balance).toLocaleString()} UNI
+📈 Всего заработано: ${parseFloat(user.total_earned).toLocaleString()} UNI
 
 💡 Минимальная сумма для вывода: ${MIN_WITHDRAWAL.toLocaleString()} UNI
   `;
-  
-  await ctx.editMessageText(balanceMessage, mainMenu);
+    
+    await ctx.editMessageText(balanceMessage, mainMenu);
+  } catch (error) {
+    console.error('❌ Ошибка в handleBalance:', error);
+    await ctx.editMessageText('😔 Произошла ошибка. Попробуйте позже.', mainMenu);
+  }
 };
 
 // Обработчик кнопки "Вывод средств"
 const handleWithdraw = async (ctx) => {
   const userId = ctx.from.id;
-  const user = db.getBalance(userId);
   
-  if (user.balance < MIN_WITHDRAWAL) {
-    const errorMessage = `
+  try {
+    const user = await PostgresDB.getUser(userId);
+    
+    if (!user) {
+      await ctx.editMessageText('❌ Пользователь не найден. Отправьте /start', mainMenu);
+      return;
+    }
+    
+    const balance = parseFloat(user.balance);
+    
+    if (balance < MIN_WITHDRAWAL) {
+      const errorMessage = `
 ❌ Недостаточно средств для вывода
 
-💰 Ваш баланс: ${user.balance.toLocaleString()} UNI
+💰 Ваш баланс: ${balance.toLocaleString()} UNI
 💸 Минимум для вывода: ${MIN_WITHDRAWAL.toLocaleString()} UNI
 
 Пополните баланс, чтобы вывести средства.
-    `;
+      `;
+      
+      await ctx.editMessageText(errorMessage, mainMenu);
+      return;
+    }
     
-    await ctx.editMessageText(errorMessage, mainMenu);
-    return;
-  }
-  
-  const fee = WITHDRAWAL_FEE;
-  const withdrawMessage = `
+    const fee = WITHDRAWAL_FEE;
+    const withdrawMessage = `
 💸 Вывод средств
 
-💰 Доступно для вывода: ${user.balance.toLocaleString()} UNI
+💰 Доступно для вывода: ${balance.toLocaleString()} UNI
 💸 Сумма вывода: ${MIN_WITHDRAWAL.toLocaleString()} UNI
 💳 Комиссия: ${fee} TON
 
 ✅ Подтвердите вывод средств
   `;
-  
-  // Сохраняем состояние для подтверждения
-  ctx.session = ctx.session || {};
-  ctx.session.pendingWithdrawal = {
-    amount: MIN_WITHDRAWAL,
-    fee: fee
-  };
-  
-  await ctx.editMessageText(withdrawMessage, confirmWithdrawKeyboard);
+    
+    // Сохраняем состояние для подтверждения
+    ctx.session = ctx.session || {};
+    ctx.session.pendingWithdrawal = {
+      amount: MIN_WITHDRAWAL,
+      fee: fee
+    };
+    
+    await ctx.editMessageText(withdrawMessage, confirmWithdrawKeyboard);
+  } catch (error) {
+    console.error('❌ Ошибка в handleWithdraw:', error);
+    await ctx.editMessageText('😔 Произошла ошибка. Попробуйте позже.', mainMenu);
+  }
 };
 
 // Обработчик подтверждения вывода
 const handleConfirmWithdraw = async (ctx) => {
   const userId = ctx.from.id;
   
-  if (!ctx.session?.pendingWithdrawal) {
-    await ctx.editMessageText('❌ Ошибка: данные о выводе не найдены', mainMenu);
-    return;
-  }
-  
-  const { amount, fee } = ctx.session.pendingWithdrawal;
-  
   try {
-    const user = db.createWithdrawal(userId, amount);
+    if (!ctx.session?.pendingWithdrawal) {
+      await ctx.editMessageText('❌ Ошибка: данные о выводе не найдены', mainMenu);
+      return;
+    }
+    
+    const { amount, fee } = ctx.session.pendingWithdrawal;
+    
+    // Получаем текущего пользователя
+    const user = await PostgresDB.getUser(userId);
+    if (!user) {
+      await ctx.editMessageText('❌ Пользователь не найден', mainMenu);
+      return;
+    }
+    
+    const currentBalance = parseFloat(user.balance);
+    const currentHoldBalance = parseFloat(user.hold_balance);
+    const currentTotalEarned = parseFloat(user.total_earned);
+    
+    // Проверяем баланс еще раз
+    if (currentBalance < amount) {
+      await ctx.editMessageText('❌ Недостаточно средств для вывода', mainMenu);
+      return;
+    }
+    
+    // Обновляем баланс
+    const newBalance = currentBalance - amount;
+    const newHoldBalance = currentHoldBalance + amount;
+    
+    await PostgresDB.updateUserBalance(userId, newBalance, newHoldBalance, currentTotalEarned);
+    
+    // Добавляем транзакцию
+    await PostgresDB.addTransaction(userId, 'withdrawal', amount, fee);
     
     const successMessage = `
 ✅ Вы подали заявку на вывод ${amount.toLocaleString()} UNI
 
 💳 Списано комиссии: ${fee} TON
-💰 Баланс: ${user.balance.toLocaleString()} UNI
-⏳ В обработке: ${user.holdBalance.toLocaleString()} UNI
+💰 Баланс: ${newBalance.toLocaleString()} UNI
+⏳ В обработке: ${newHoldBalance.toLocaleString()} UNI
 
 📧 Заявка будет обработана в течение 24 часов
     `;
@@ -117,7 +171,8 @@ const handleConfirmWithdraw = async (ctx) => {
     await ctx.editMessageText(successMessage, mainMenu);
     
   } catch (error) {
-    await ctx.editMessageText(`❌ Ошибка: ${error.message}`, mainMenu);
+    console.error('❌ Ошибка в handleConfirmWithdraw:', error);
+    await ctx.editMessageText('😔 Произошла ошибка при выводе средств', mainMenu);
   }
 };
 
@@ -160,23 +215,34 @@ const handlePaymentConfirmed = async (ctx) => {
 // Обработчик кнопки "Статистика"
 const handleStats = async (ctx) => {
   const userId = ctx.from.id;
-  const user = db.getBalance(userId);
-  const stats = db.getStats();
   
-  const statsMessage = `
+  try {
+    const user = await PostgresDB.getUser(userId);
+    const stats = await PostgresDB.getStats();
+    
+    if (!user) {
+      await ctx.editMessageText('❌ Пользователь не найден. Отправьте /start', mainMenu);
+      return;
+    }
+    
+    const statsMessage = `
 📈 Ваша статистика:
 
-💰 Доступно: ${user.balance.toLocaleString()} UNI
-⏳ В обработке: ${user.holdBalance.toLocaleString()} UNI
-📊 Всего заработано: ${user.totalEarned.toLocaleString()} UNI
+💰 Доступно: ${parseFloat(user.balance).toLocaleString()} UNI
+⏳ В обработке: ${parseFloat(user.hold_balance).toLocaleString()} UNI
+📊 Всего заработано: ${parseFloat(user.total_earned).toLocaleString()} UNI
 
 🌍 Общая статистика бота:
-👥 Пользователей: ${stats.totalUsers}
-💰 Общий баланс: ${stats.totalBalance.toLocaleString()} UNI
-⏳ В обработке: ${stats.totalHoldBalance.toLocaleString()} UNI
+👥 Пользователей: ${stats?.total_users || 0}
+💰 Общий баланс: ${parseFloat(stats?.total_balance || 0).toLocaleString()} UNI
+⏳ В обработке: ${parseFloat(stats?.total_hold_balance || 0).toLocaleString()} UNI
   `;
-  
-  await ctx.editMessageText(statsMessage, mainMenu);
+    
+    await ctx.editMessageText(statsMessage, mainMenu);
+  } catch (error) {
+    console.error('❌ Ошибка в handleStats:', error);
+    await ctx.editMessageText('😔 Произошла ошибка при получении статистики', mainMenu);
+  }
 };
 
 // Обработчик кнопки "Помощь"

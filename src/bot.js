@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Telegraf, session } = require('telegraf');
 const express = require('express');
 const handlers = require('./handlers');
+const PostgresDB = require('./database-postgres');
 
 // Отключаем предупреждение о punycode
 process.removeAllListeners('warning');
@@ -119,6 +120,15 @@ async function startBot() {
     console.log(`🔗 WEBHOOK_URL: ${process.env.WEBHOOK_URL || 'не настроен'}`);
     console.log(`🔑 BOT_TOKEN: ${process.env.BOT_TOKEN ? 'настроен' : 'не настроен'}`);
     
+    // Инициализация базы данных
+    try {
+      await PostgresDB.initializeDatabase();
+      await PostgresDB.testConnection();
+    } catch (error) {
+      console.warn('⚠️ Ошибка инициализации базы данных:', error.message);
+      console.log('ℹ️ Бот будет работать без базы данных');
+    }
+    
     const port = process.env.PORT || 3000;
     
     if (process.env.NODE_ENV === 'production') {
@@ -191,13 +201,15 @@ async function startBot() {
 }
 
 // Graceful stop
-process.once('SIGINT', () => {
+process.once('SIGINT', async () => {
   console.log('🛑 Получен сигнал SIGINT, останавливаем бота...');
+  await PostgresDB.closePool();
   bot.stop('SIGINT');
 });
 
-process.once('SIGTERM', () => {
+process.once('SIGTERM', async () => {
   console.log('🛑 Получен сигнал SIGTERM, останавливаем бота...');
+  await PostgresDB.closePool();
   bot.stop('SIGTERM');
 });
 
