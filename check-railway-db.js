@@ -173,3 +173,6 @@ async function checkRailwayDatabase() {
 
 // Запускаем проверку
 checkRailwayDatabase();
+
+
+

@@ -1,77 +1,45 @@
-// Простое хранилище данных в памяти (для демонстрации)
-// В продакшене замените на реальную базу данных
+// Базовая структура для работы с данными (чистый бот)
 
-class UserDatabase {
-  constructor() {
-    this.users = new Map();
-  }
+// Простое хранилище в памяти для разработки
+const users = new Map();
 
-  // Получить пользователя или создать нового
-  getUser(userId, username = null) {
-    if (!this.users.has(userId)) {
-      this.users.set(userId, {
-        userId: userId,
-        username: username,
-        balance: 0,
-        holdBalance: 0,
-        totalEarned: 0
-      });
-    }
-    return this.users.get(userId);
-  }
+// Базовые функции для чистого бота
+const database = {
+  // Получить пользователя
+  getUser: (userId) => {
+    return users.get(userId) || null;
+  },
 
-  // Обновить данные пользователя
-  updateUser(userId, updates) {
-    const user = this.getUser(userId);
-    Object.assign(user, updates);
-    this.users.set(userId, user);
-    return user;
-  }
-
-  // Получить баланс пользователя
-  getBalance(userId) {
-    return this.getUser(userId);
-  }
-
-  // Пополнить баланс
-  addBalance(userId, amount) {
-    const user = this.getUser(userId);
-    user.balance += amount;
-    user.totalEarned += amount;
-    this.users.set(userId, user);
-    return user;
-  }
-
-  // Создать заявку на вывод
-  createWithdrawal(userId, amount) {
-    const user = this.getUser(userId);
+  // Создать или обновить пользователя
+  createOrUpdateUser: (userId, username, firstName, lastName) => {
+    const user = {
+      userId,
+      username,
+      firstName,
+      lastName,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
     
-    if (user.balance < amount) {
-      throw new Error('Недостаточно средств');
-    }
-
-    user.balance -= amount;
-    user.holdBalance += amount;
-    this.users.set(userId, user);
-    
+    users.set(userId, user);
     return user;
-  }
+  },
 
-  // Получить всех пользователей (для админки)
-  getAllUsers() {
-    return Array.from(this.users.values());
-  }
+  // Получить всех пользователей
+  getAllUsers: () => {
+    return Array.from(users.values());
+  },
 
   // Получить статистику
-  getStats() {
-    const users = this.getAllUsers();
+  getStats: () => {
+    const totalUsers = users.size;
     return {
-      totalUsers: users.length,
-      totalBalance: users.reduce((sum, user) => sum + user.balance, 0),
-      totalHoldBalance: users.reduce((sum, user) => sum + user.holdBalance, 0),
-      totalEarned: users.reduce((sum, user) => sum + user.totalEarned, 0)
+      totalUsers,
+      totalBalance: 0,
+      totalHoldBalance: 0,
+      totalEarned: 0
     };
   }
-}
+};
 
-module.exports = new UserDatabase();
+module.exports = database;

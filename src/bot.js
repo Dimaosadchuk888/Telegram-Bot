@@ -1,8 +1,5 @@
 require('dotenv').config();
-const { Telegraf, session } = require('telegraf');
-const express = require('express');
-const handlers = require('./handlers');
-const PostgresDB = require('./database-postgres');
+const { Telegraf } = require('telegraf');
 
 // Отключаем предупреждение о punycode
 process.removeAllListeners('warning');
@@ -18,6 +15,7 @@ if (!process.env.BOT_TOKEN) {
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // Создаем Express приложение для healthcheck
+const express = require('express');
 const app = express();
 
 // Healthcheck endpoint для Railway
@@ -30,7 +28,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Healthcheck endpoint для Railway
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -39,133 +36,79 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Endpoint для проверки базы данных
-app.get('/check-db', async (req, res) => {
-  try {
-    const PostgresDB = require('./database-postgres');
-    
-    // Проверяем соединение
-    const connectionTest = await PostgresDB.testConnection();
-    if (!connectionTest) {
-      return res.json({
-        status: 'error',
-        message: 'Database connection failed',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Проверяем таблицы
-    const { Pool } = require('pg');
-    const getDatabaseConfig = () => {
-      const isProduction = process.env.NODE_ENV === 'production';
-      const connectionString = isProduction 
-        ? process.env.DATABASE_URL 
-        : process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL;
-
-      return {
-        connectionString,
-        ssl: isProduction ? { rejectUnauthorized: false } : false,
-      };
-    };
-
-    const pool = new Pool(getDatabaseConfig());
-    
-    // Проверяем существующие таблицы
-    const tablesResult = await pool.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      ORDER BY table_name;
-    `);
-
-    const usersCount = await pool.query('SELECT COUNT(*) as count FROM users');
-    const transactionsCount = await pool.query('SELECT COUNT(*) as count FROM transactions');
-
-    await pool.end();
-
-    res.json({
-      status: 'success',
-      database: 'connected',
-      tables: tablesResult.rows.map(row => row.table_name),
-      users_count: parseInt(usersCount.rows[0].count),
-      transactions_count: parseInt(transactionsCount.rows[0].count),
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    res.json({
-      status: 'error',
-      message: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Логирование webhook запросов
-app.use('/webhook', (req, res, next) => {
-  console.log('📨 Получен webhook запрос:', {
-    method: req.method,
-    url: req.url,
-    body: req.body,
-    timestamp: new Date().toISOString()
-  });
-  next();
-});
-
 // Webhook endpoint для Telegram
 app.post('/webhook', bot.webhookCallback('/webhook'));
 app.get('/webhook', (req, res) => {
   res.json({ status: 'webhook endpoint ready' });
 });
 
-// Подключаем middleware для сессий
-bot.use(session());
+// Простой обработчик команды /start
+bot.start(async (ctx) => {
+  try {
+    const userId = ctx.from.id;
+    const username = ctx.from.username;
+    const firstName = ctx.from.first_name;
+    
+    console.log(`👤 Пользователь ${firstName} (@${username}) запустил бота`);
+    
+    // Текст сообщения о закрытии WarpJump
+    const messageText = `🙋‍♂️ Дорогие участники!
 
-// Обработчики команд
-bot.start(handlers.handleStart);
-bot.help(handlers.handleHelp);
+WarpJump-бот полностью закрыт, и вывод монет больше не доступен.
+Все ваши монеты, которые вы добывали в WarpJump через фарминг, объединены и закреплены за каждым аккаунтом который принимал участие в добыче монет через Bot. Ничего не потеряно — все монеты сохранены за вашими аккаунтами. ✅
 
-// Обработчики callback-кнопок
-bot.action('balance', handlers.handleBalance);
-bot.action('withdraw', handlers.handleWithdraw);
-bot.action('deposit', handlers.handleDeposit);
-bot.action('stats', handlers.handleStats);
-bot.action('help', handlers.handleHelp);
-bot.action('back_to_main', handlers.handleBackToMain);
+Теперь мы приглашаем вас в UniFarm!
+Там вы можете продолжить участие, получать дополнительные монеты и развивать свои аккаунты.
 
-// Обработчики вывода средств
-bot.action('confirm_withdraw', handlers.handleConfirmWithdraw);
-bot.action('cancel_withdraw', handlers.handleCancelWithdraw);
+💡 Напоминаем: все UNI, которые были у вас на балансе и в фарминге в WarpJump, закреплены за вашим аккаунтом в полной мере.
 
-// Обработчики пополнения
-bot.action('payment_confirmed', handlers.handlePaymentConfirmed);
+Следите за новостями в нашем официальном канале https://t.me/UniverseGamesChannel 
 
-// Обработчик неизвестных callback-ов
-bot.on('callback_query', async (ctx) => {
-  await ctx.answerCbQuery('⚠️ Неизвестная команда');
+Вместе мы делаем шаг в новую эру UniFarm! 🚀✨
+
+Переходи: 👉 https://t.me/UniFarming_Bot/UniFarm?startapp=REF_1753357645380_f0gt4q`;
+
+    await ctx.reply(messageText);
+    
+    console.log(`✅ Сообщение отправлено пользователю ${userId}`);
+    
+  } catch (error) {
+    console.error('❌ Ошибка при отправке сообщения:', error);
+    await ctx.reply('😔 Произошла ошибка. Попробуйте позже.');
+  }
 });
 
-// Обработчик текстовых сообщений
+// Обработчик всех остальных сообщений
 bot.on('text', async (ctx) => {
   const text = ctx.message.text;
   
-  // Если пользователь отправил команду /start, показываем главное меню
-  if (text === '/start') {
-    await handlers.handleStart(ctx);
-    return;
+  // Если это не команда /start, отправляем то же сообщение
+  if (text !== '/start') {
+    const messageText = `🙋‍♂️ Дорогие участники!
+
+WarpJump-бот полностью закрыт, и вывод монет больше не доступен.
+Все ваши монеты, которые вы добывали в WarpJump через фарминг, объединены и закреплены за каждым аккаунтом который принимал участие в добыче монет через Bot. Ничего не потеряно — все монеты сохранены за вашими аккаунтами. ✅
+
+Теперь мы приглашаем вас в UniFarm!
+Там вы можете продолжить участие, получать дополнительные монеты и развивать свои аккаунты.
+
+💡 Напоминаем: все UNI, которые были у вас на балансе и в фарминге в WarpJump, закреплены за вашим аккаунтом в полной мере.
+
+Следите за новостями в нашем официальном канале https://t.me/UniverseGamesChannel 
+
+Вместе мы делаем шаг в новую эру UniFarm! 🚀✨
+
+Переходи: 👉 https://t.me/UniFarming_Bot/UniFarm?startapp=REF_1753357645380_f0gt4q`;
+
+    await ctx.reply(messageText);
   }
-  
-  // Для других текстовых сообщений показываем главное меню
-  const { mainMenu } = require('./keyboards');
-  await ctx.reply('🤖 Используйте кнопки меню для навигации:', mainMenu);
 });
 
 // Обработчик ошибок
 bot.catch((err, ctx) => {
   console.error(`❌ Ошибка для ${ctx.updateType}:`, err);
   
-  // Отправляем пользователю понятное сообщение об ошибке
-  const errorMessage = '😔 Произошла ошибка. Попробуйте позже или обратитесь в поддержку.';
+  const errorMessage = '😔 Произошла ошибка. Попробуйте позже.';
   
   if (ctx.callbackQuery) {
     ctx.answerCbQuery(errorMessage);
@@ -177,28 +120,10 @@ bot.catch((err, ctx) => {
 // Запуск бота
 async function startBot() {
   try {
-    console.log('🚀 Запуск Telegram Farming Bot...');
+    console.log('🚀 Запуск Telegram Bot...');
     console.log(`🔧 NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🔗 WEBHOOK_URL: ${process.env.WEBHOOK_URL || 'не настроен'}`);
     console.log(`🔑 BOT_TOKEN: ${process.env.BOT_TOKEN ? 'настроен' : 'не настроен'}`);
-    
-    // Инициализация базы данных
-    try {
-      console.log('🗄️ Начинаем инициализацию базы данных...');
-      await PostgresDB.initializeDatabase();
-      console.log('✅ База данных инициализирована');
-      
-      const connectionTest = await PostgresDB.testConnection();
-      if (connectionTest) {
-        console.log('✅ Соединение с базой данных установлено');
-      } else {
-        console.warn('⚠️ Не удалось проверить соединение с базой данных');
-      }
-    } catch (error) {
-      console.error('❌ Критическая ошибка инициализации базы данных:', error.message);
-      console.log('ℹ️ Бот будет работать без базы данных');
-      console.log('💡 Проверьте переменные окружения в Railway Dashboard');
-    }
     
     const port = process.env.PORT || 3000;
     
@@ -219,51 +144,36 @@ async function startBot() {
         console.log(`🏥 Healthcheck доступен по адресу: http://localhost:${port}/health`);
       });
       
-      // Настраиваем webhook (опционально)
+      // Настраиваем webhook
       try {
         await bot.telegram.setWebhook(process.env.WEBHOOK_URL);
         console.log('✅ Webhook настроен');
       } catch (error) {
         console.warn('⚠️ Не удалось настроить webhook:', error.message);
-        console.log('ℹ️ Бот будет работать без webhook');
-      }
-      
-      // Удаляем старое меню (нижние кнопки)
-      try {
-        await bot.telegram.setChatMenuButton({
-          menu_button: { type: 'default' }
-        });
-        console.log('✅ Старое меню удалено');
-      } catch (error) {
-        console.warn('⚠️ Не удалось удалить старое меню:', error.message);
       }
       
     } else {
       // Локальная разработка с long polling
       console.log('🔄 Запуск в режиме разработки (long polling)');
       
-      if (!process.env.BOT_TOKEN || process.env.BOT_TOKEN === 'your_bot_token_here') {
-        console.error('❌ BOT_TOKEN не настроен для разработки!');
-        console.log('📝 Добавьте BOT_TOKEN в файл .env для локального тестирования');
-        process.exit(1);
+      // Проверяем, что токен не является placeholder
+      if (process.env.BOT_TOKEN === 'your_bot_token_here') {
+        console.log('⚠️ BOT_TOKEN не настроен, запускаем только HTTP сервер для тестирования');
+        
+        // Запускаем только Express сервер для тестирования
+        app.listen(port, () => {
+          console.log(`✅ HTTP сервер запущен на порту ${port}`);
+          console.log(`🏥 Healthcheck доступен по адресу: http://localhost:${port}/health`);
+          console.log('📝 Настройте BOT_TOKEN в .env для полной работы бота');
+        });
+        return;
       }
       
       await bot.launch();
-      
-      // Удаляем старое меню (нижние кнопки)
-      try {
-        await bot.telegram.setChatMenuButton({
-          menu_button: { type: 'default' }
-        });
-        console.log('✅ Старое меню удалено');
-      } catch (error) {
-        console.warn('⚠️ Не удалось удалить старое меню:', error.message);
-      }
     }
     
-    console.log('✅ Farming Bot успешно запущен!');
+    console.log('✅ Telegram Bot успешно запущен!');
     console.log('📱 Отправьте /start в Telegram для проверки');
-    console.log('💰 Бот готов к работе с балансами и выводами');
     
   } catch (error) {
     console.error('❌ Ошибка при запуске бота:', error);
@@ -272,15 +182,13 @@ async function startBot() {
 }
 
 // Graceful stop
-process.once('SIGINT', async () => {
+process.once('SIGINT', () => {
   console.log('🛑 Получен сигнал SIGINT, останавливаем бота...');
-  await PostgresDB.closePool();
   bot.stop('SIGINT');
 });
 
-process.once('SIGTERM', async () => {
+process.once('SIGTERM', () => {
   console.log('🛑 Получен сигнал SIGTERM, останавливаем бота...');
-  await PostgresDB.closePool();
   bot.stop('SIGTERM');
 });
 

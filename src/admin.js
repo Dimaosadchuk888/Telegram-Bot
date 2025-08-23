@@ -1,91 +1,24 @@
-const db = require('./database');
+// Базовые админские функции для чистого бота
 
-// Админские команды для тестирования
-const adminCommands = {
-  // Добавить баланс пользователю
-  addBalance: (userId, amount) => {
-    try {
-      const user = db.addBalance(userId, amount);
-      return {
-        success: true,
-        message: `✅ Добавлено ${amount.toLocaleString()} UNI пользователю ${userId}`,
-        user: user
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `❌ Ошибка: ${error.message}`
-      };
-    }
-  },
-
-  // Установить баланс пользователю
-  setBalance: (userId, amount) => {
-    try {
-      const user = db.updateUser(userId, { balance: amount });
-      return {
-        success: true,
-        message: `✅ Установлен баланс ${amount.toLocaleString()} UNI пользователю ${userId}`,
-        user: user
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `❌ Ошибка: ${error.message}`
-      };
-    }
-  },
-
-  // Получить статистику
-  getStats: () => {
-    try {
-      const stats = db.getStats();
-      return {
-        success: true,
-        message: `📊 Статистика бота:\n👥 Пользователей: ${stats.totalUsers}\n💰 Общий баланс: ${stats.totalBalance.toLocaleString()} UNI\n⏳ В обработке: ${stats.totalHoldBalance.toLocaleString()} UNI\n📈 Всего заработано: ${stats.totalEarned.toLocaleString()} UNI`,
-        stats: stats
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `❌ Ошибка: ${error.message}`
-      };
-    }
-  },
-
-  // Получить информацию о пользователе
-  getUserInfo: (userId) => {
-    try {
-      const user = db.getUser(userId);
-      return {
-        success: true,
-        message: `👤 Пользователь ${userId}:\n💰 Баланс: ${user.balance.toLocaleString()} UNI\n⏳ В обработке: ${user.holdBalance.toLocaleString()} UNI\n📈 Всего заработано: ${user.totalEarned.toLocaleString()} UNI\n👤 Username: @${user.username || 'не указан'}`,
-        user: user
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `❌ Ошибка: ${error.message}`
-      };
-    }
-  },
-
-  // Получить всех пользователей
-  getAllUsers: () => {
-    try {
-      const users = db.getAllUsers();
-      return {
-        success: true,
-        message: `👥 Всего пользователей: ${users.length}`,
-        users: users
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `❌ Ошибка: ${error.message}`
-      };
-    }
-  }
+// Проверка на админа
+const isAdmin = (userId) => {
+  const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id.trim())) : [];
+  return adminIds.includes(userId);
 };
 
-module.exports = adminCommands;
+// Простая админская команда
+const handleAdmin = async (ctx) => {
+  const userId = ctx.from.id;
+  
+  if (!isAdmin(userId)) {
+    await ctx.reply('❌ У вас нет доступа к админским функциям');
+    return;
+  }
+  
+  await ctx.reply('👨‍💼 Админская панель\n\nПока что здесь ничего нет.');
+};
+
+module.exports = {
+  isAdmin,
+  handleAdmin
+};
